@@ -1,0 +1,29 @@
+# VeroRoute macOS Build Artifacts
+VeroRoute/
+*.tar.gz
+*.app/
+*.app
+!VeroRoute.app.tar.gz
+.DS_Store
+
+# Temporary files
+*~
+*.swp
+*.tmp
+
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Build directories
+build/
+dist/
+
+# Log files
+*.log
+
+# IDE files
+.vscode/
+.idea/
+*.xcodeproj/
