@@ -128,6 +128,20 @@ jobs:
           lipo -archs "$BIN" | grep -qw arm64
           echo "Built VeroRoute ${UPSTREAM_VERSION} for arm64"
 
+      - name: Bundle missing Brotli runtime dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Cocoa plugin dependency chain includes libbrotlidec which loads
+          # libbrotlicommon at runtime; macdeployqt did not bundle it.
+          BROTLI="$(brew --prefix brotli)/lib/libbrotlicommon.1.dylib"
+          test -f "$BROTLI"
+          cp -L "$BROTLI" VeroRoute.app/Contents/Frameworks/libbrotlicommon.1.dylib
+          install_name_tool -id "@rpath/libbrotlicommon.1.dylib" VeroRoute.app/Contents/Frameworks/libbrotlicommon.1.dylib
+          # Signatures are applied in the following step after Mach-O edits.
+          test -f VeroRoute.app/Contents/Frameworks/libbrotlidec.1.dylib
+          otool -L VeroRoute.app/Contents/Frameworks/libbrotlidec.1.dylib
+
       - name: Ad-hoc sign deployed application and verify signatures
         shell: bash
         run: |
