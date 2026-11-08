@@ -99,7 +99,18 @@ jobs:
           set -euo pipefail
           QT_BIN="$(brew --prefix qt@5)/bin"
           "$QT_BIN/macdeployqt" VeroRoute.app -verbose=1
+          # QtGui requires the Cocoa platform plugin to create QApplication.
+          # macdeployqt may omit it if the upstream project has no qt.conf.
+          QT_PLUGINS="$(brew --prefix qt@5)/plugins"
+          test -f "$QT_PLUGINS/platforms/libqcocoa.dylib"
+          mkdir -p VeroRoute.app/Contents/PlugIns/platforms
+          cp -f "$QT_PLUGINS/platforms/libqcocoa.dylib" VeroRoute.app/Contents/PlugIns/platforms/
+          # Force Qt to load bundled plugins, never plugins from the build host.
           mkdir -p VeroRoute.app/Contents/Resources
+          printf '[Paths]\\nPlugins = PlugIns\\n' > VeroRoute.app/Contents/Resources/qt.conf
+          # Resolve any Qt dependencies introduced by the copied plugin.
+          "$QT_BIN/macdeployqt" VeroRoute.app -verbose=1
+          test -f VeroRoute.app/Contents/PlugIns/platforms/libqcocoa.dylib
           for resource in tutorials Tutorials examples Examples libraries Libraries; do
             FOUND="$(find upstream -type d -name "$resource" -print -quit)"
             if [ -n "$FOUND" ]; then
