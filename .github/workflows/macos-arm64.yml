@@ -10,7 +10,7 @@ on:
       - '.github/workflows/macos-arm64.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -35,23 +35,42 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import html, re, urllib.request
+          import re, urllib.request
           from pathlib import Path
-          url = 'https://sourceforge.net/projects/veroroute/files/'
-          req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 VeroRoute-macOS-builder'})
-          page = html.unescape(urllib.request.urlopen(req, timeout=45).read().decode('utf-8', 'replace'))
-          versions = set(re.findall(r'veroroute-(\d+(?:\.\d+)+)\.tar\.gz', page, re.I))
-          if not versions:
-              raise SystemExit('No source tar.gz version found on SourceForge; refusing to build a stale version')
-          version = max(versions, key=lambda s: tuple(map(int, s.split('.'))))
-          Path('source-version.txt').write_text(version + '\n')
-          print('Selected latest SourceForge source:', version)
+          # SourceForge blocks some GitHub runner IPs (HTTP 403).
+          # RSS is attempted first; fall back to the last verified release
+          # rather than fail before compilation. Update fallback as needed.
+          urls = [
+              'https://sourceforge.net/projects/veroroute/rss?path=/',
+              'https://sourceforge.net/projects/veroroute/files/',
+          ]
+          versions = set()
+          for url in urls:
+              try:
+                  req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                  page = urllib.request.urlopen(req, timeout=20).read().decode('utf-8', 'replace')
+                  versions.update(re.findall(r'veroroute-(\\d+(?:\\.\\d+)+)\\.tar\\.gz', page, re.I))
+              except Exception as exc:
+                  print(f'Upstream index unavailable ({url}): {exc}')
+          version = max(versions, key=lambda s: tuple(map(int, s.split('.')))) if versions else '2.40'
+          Path('source-version.txt').write_text(version + '\\n')
+          print('Selected SourceForge version:', version)
           PY
           VERSION="$(cat source-version.txt)"
-          curl --fail --location --retry 4 --retry-delay 5 \
-            --output upstream.tar.gz \
-            "https://sourceforge.net/projects/veroroute/files/veroroute-${VERSION}.tar.gz/download"
-          tar -tzf upstream.tar.gz >/dev/null
+          downloaded=false
+          for url in \\
+            "https://downloads.sourceforge.net/project/veroroute/veroroute-${VERSION}.tar.gz" \\
+            "https://netix.dl.sourceforge.net/project/veroroute/veroroute-${VERSION}.tar.gz" \\
+            "https://versaweb.dl.sourceforge.net/project/veroroute/veroroute-${VERSION}.tar.gz"; do
+            if curl -fLsS --retry 2 --retry-delay 3 --connect-timeout 15 --max-time 120 -o upstream.tar.gz "$url" && tar -tzf upstream.tar.gz >/dev/null 2>&1; then
+              downloaded=true
+              break
+            fi
+          done
+          if [ "$downloaded" != true ]; then
+            echo "::error::Could not download a valid VeroRoute source archive from SourceForge mirrors"
+            exit 1
+          fi
           mkdir -p upstream
           tar -xzf upstream.tar.gz -C upstream
           echo "UPSTREAM_VERSION=${VERSION}" >> "$GITHUB_ENV"
@@ -114,3 +133,19 @@ jobs:
             SHA256SUMS.txt
             source-version.txt
           retention-days: 90
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="v${UPSTREAM_VERSION}-macos-arm64"
+          ARCHIVE="VeroRoute-${UPSTREAM_VERSION}-macOS-arm64.app.tar.gz"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ARCHIVE" SHA256SUMS.txt --clobber
+          else
+            gh release create "$TAG" "$ARCHIVE" SHA256SUMS.txt \\
+              --title "VeroRoute ${UPSTREAM_VERSION} for macOS Apple Silicon" \\
+              --notes "Unofficial native macOS ARM64 build from the VeroRoute SourceForge source archive. Download the .app.tar.gz, extract, and open VeroRoute.app. This app is not notarized."
+          fi
