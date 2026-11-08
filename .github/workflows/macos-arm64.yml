@@ -117,6 +117,20 @@ jobs:
           lipo -archs "$BIN" | grep -qw arm64
           echo "Built VeroRoute ${UPSTREAM_VERSION} for arm64"
 
+      - name: Ad-hoc sign deployed application and verify signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+          # macdeployqt rewrites Mach-O load commands and copies frameworks.
+          # Existing signatures can become invalid (CODESIGNING Invalid Page).
+          # Sign the finished bundle only after all modifications are complete.
+          codesign --force --deep --sign - --timestamp=none VeroRoute.app
+          codesign --verify --deep --strict --verbose=2 VeroRoute.app
+          codesign -dv --verbose=2 VeroRoute.app 2>&1
+          BIN="$(find VeroRoute.app/Contents/MacOS -maxdepth 1 -type f -print -quit)"
+          test -n "$BIN"
+          lipo -archs "$BIN" | grep -qw arm64
+
       - name: Package application
         shell: bash
         run: |
