@@ -49,18 +49,18 @@ jobs:
               try:
                   req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
                   page = urllib.request.urlopen(req, timeout=20).read().decode('utf-8', 'replace')
-                  versions.update(re.findall(r'veroroute-(\\d+(?:\\.\\d+)+)\\.tar\\.gz', page, re.I))
+                  versions.update(re.findall(r'veroroute-(\d+(?:\.\d+)+)\.tar\.gz', page, re.I))
               except Exception as exc:
                   print(f'Upstream index unavailable ({url}): {exc}')
           version = max(versions, key=lambda s: tuple(map(int, s.split('.')))) if versions else '2.40'
-          Path('source-version.txt').write_text(version + '\\n')
+          Path('source-version.txt').write_text(version + '\n')
           print('Selected SourceForge version:', version)
           PY
           VERSION="$(cat source-version.txt)"
           downloaded=false
-          for url in \\
-            "https://downloads.sourceforge.net/project/veroroute/veroroute-${VERSION}.tar.gz" \\
-            "https://netix.dl.sourceforge.net/project/veroroute/veroroute-${VERSION}.tar.gz" \\
+          for url in \
+            "https://downloads.sourceforge.net/project/veroroute/veroroute-${VERSION}.tar.gz" \
+            "https://netix.dl.sourceforge.net/project/veroroute/veroroute-${VERSION}.tar.gz" \
             "https://versaweb.dl.sourceforge.net/project/veroroute/veroroute-${VERSION}.tar.gz"; do
             if curl -fLsS --retry 2 --retry-delay 3 --connect-timeout 15 --max-time 120 -o upstream.tar.gz "$url" && tar -tzf upstream.tar.gz >/dev/null 2>&1; then
               downloaded=true
@@ -145,7 +145,7 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$ARCHIVE" SHA256SUMS.txt --clobber
           else
-            gh release create "$TAG" "$ARCHIVE" SHA256SUMS.txt \\
-              --title "VeroRoute ${UPSTREAM_VERSION} for macOS Apple Silicon" \\
+            gh release create "$TAG" "$ARCHIVE" SHA256SUMS.txt \
+              --title "VeroRoute ${UPSTREAM_VERSION} for macOS Apple Silicon" \
               --notes "Unofficial native macOS ARM64 build from the VeroRoute SourceForge source archive. Download the .app.tar.gz, extract, and open VeroRoute.app. This app is not notarized."
           fi
